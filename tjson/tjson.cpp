@@ -1,9 +1,36 @@
+/*
+	Copyright (c) 2014 Zhang li
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+
+	MIT License: http://www.opensource.org/licenses/mit-license.php
+*/
+
+/*
+	Author zhang li
+	Email zlvbvbzl@gmail.com
+*/
+
 #include "tjson.h"
-#include <string.h>
 #include <stdlib.h>
-#include <list>
+#include <vector>
 #include <stdint.h>
-#include <string>
 
 using namespace tjson;
 using namespace tjson::internal;
@@ -1296,7 +1323,7 @@ void tjson::Value::internal_build_float( const char *s )
 {
     assert(m_type == JT_NULL);
     assert(m_intval == 0);
-    m_type = JT_FLOAT;
+    m_type = JT_DOUBLE;
     m_fval = jsstrtod(s, NULL); //strtod(s, NULL);
 }
 
@@ -1463,9 +1490,106 @@ const tjson::Value &tjson::Value::operator[](const char *k) const
 {
     if (m_type == JT_OBJECT)
     {
+        assert(m_dict);
         return m_dict->find(String(k,strlen(k)));
     }
     return Null;
+}
+
+tjson::Value &tjson::Value::operator[](const char *k)
+{
+    if (m_type == JT_OBJECT)
+    {
+        assert(m_dict);
+        return (*m_dict)[String(k,strlen(k))];
+    }
+    static Value dummy;
+    return dummy;
+}
+
+void tjson::Value::destroy()
+{
+    switch (m_type)
+    {
+    case JT_ARRAY:
+        assert(m_array);
+        delete m_array;
+        break;
+    case JT_OBJECT:
+        assert(m_dict);
+        delete m_dict;
+        break;
+    case JT_STRING:
+        assert(m_strval);
+        delete m_strval;
+        break;
+    default:
+        break;
+    }
+    m_type = JT_NULL;
+    m_intval = 0;
+}
+
+void tjson::Value::assign( const Value &v )
+{
+    using namespace internal;    
+    switch (v.m_type)
+    {
+    case JT_ARRAY:            
+        internal_build_array();
+        *m_array = *v.m_array;
+        assert(m_array);
+        break;
+    case JT_OBJECT:    
+        assert(v.m_dict);
+        internal_build_object();        
+        *m_dict = *v.m_dict;
+        assert(m_dict);
+        break;
+    case JT_STRING:     
+        assert(v.m_strval);
+        internal_build_string(v.m_strval->c_str(), v.m_strval->size());
+        assert(m_strval);
+        break;
+    default:
+        m_intval = v.m_intval;
+        break;
+    }
+    m_type = v.m_type;
+}
+
+Value & tjson::Value::operator=( const Value &v )
+{
+    if (this == &v)
+    {
+        return *this;
+    }
+
+    if (m_type == JT_STRING)
+    {
+        if (m_strval == v.m_strval || m_strval->c_str() == v.m_strval->c_str())
+        {
+            return *this;
+        }
+    }
+    else if (m_type == JT_ARRAY)
+    {
+        if (m_array == v.m_array || m_array->m_data == v.m_array->m_data)
+        {
+            return *this;
+        }
+    }
+    else if (m_type == JT_OBJECT)
+    {
+        if (m_dict == v.m_dict || m_dict->m_data == v.m_dict->m_data)
+        {
+            return *this;
+        }
+    }
+
+    destroy();
+    assign(v);
+    return *this;
 }
 
 internal::MapData::MapData() 

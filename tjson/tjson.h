@@ -1,5 +1,33 @@
-#include <vector>
-#include <string>
+/*
+	Copyright (c) 2014 Zhang li
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+
+	MIT License: http://www.opensource.org/licenses/mit-license.php
+*/
+
+/*
+	Author zhang li
+	Email zlvbvbzl@gmail.com
+*/
+
+#include <string.h>
 #include <map>
 #include <malloc.h>
 #include <assert.h>
@@ -13,7 +41,7 @@ namespace tjson
         JT_NULL,
         JT_ARRAY,
         JT_BOOL,
-        JT_FLOAT,
+        JT_DOUBLE,
         JT_INTEGER,        
         JT_OBJECT,
         JT_STRING,
@@ -231,7 +259,6 @@ namespace tjson
             friend void data_copy(T &l, const T &r);
             template <class T>
             friend T& data_set(T &l, const T &r);
-        private:
             StringData *m_data;
         };
 
@@ -271,7 +298,6 @@ namespace tjson
                 return data_size(m_data);
             } 
             Value &operator[](size_t idx);
-        private:
             VectorData *m_data;
             template <class T>
             friend void data_copy(T &l, const T &r);
@@ -285,16 +311,52 @@ namespace tjson
     {
     public:
         Value()
-            :m_type(JT_NULL),m_intval(0),internal_parent(NULL)
+            :internal::jmem_alloc<Value>(),m_type(JT_NULL),m_intval(0),internal_parent(NULL)
         {
 
         }
-        Value(const Value &v);
-        ~Value();
+
+        Value(const Value &v)
+            :internal::jmem_alloc<Value>(),m_type(JT_NULL),m_intval(0),internal_parent(NULL)
+        {
+            assign(v);
+        }
+
+        Value(long long v)
+            :internal::jmem_alloc<Value>(),m_type(JT_INTEGER),m_intval(v),internal_parent(NULL)
+        {
+        }
+
+        Value(int v)
+            :internal::jmem_alloc<Value>(),m_type(JT_INTEGER),m_intval(v),internal_parent(NULL)
+        {
+        }
+
+        Value(double v)
+            :internal::jmem_alloc<Value>(),m_type(JT_DOUBLE),m_fval(v),internal_parent(NULL)
+        {
+        }
+
+        Value( const char *v ) 
+            :internal::jmem_alloc<Value>(),m_type(JT_STRING),m_intval(0),internal_parent(NULL)
+        {
+            m_strval = new internal::String(v, strlen(v));
+        }
+
+        Value(bool v)
+            :internal::jmem_alloc<Value>(),m_type(JT_BOOL),m_bool(v),internal_parent(NULL)
+        {
+        }
+
+        ~Value() {destroy();}  
+
+        Value &operator = (const Value &v);        
+
         Value &operator[](size_t index)
         {
             if (m_type == JT_ARRAY)
             {
+                assert(m_array);
                 return (*m_array)[index];
             }
             return Null;
@@ -303,23 +365,63 @@ namespace tjson
         {
             if (m_type == JT_ARRAY)
             {
+                assert(m_array);
                 return (*m_array)[index];
             }
             return Null;
         }
         const Value &operator[](const char *k) const;
-        bool IsBool() const    { return m_type == JT_BOOL;    }
-        bool IsFloat() const   { return m_type == JT_FLOAT;   }
-        bool IsInteger() const { return m_type == JT_INTEGER; }
-        bool IsString() const  { return m_type == JT_STRING;  }
-        bool IsArray() const   { return m_type == JT_ARRAY;   }
-        bool IsObject() const  { return m_type == JT_OBJECT;  }
-        bool IsNull() const    { return m_type == JT_NULL;    }
+        Value &operator[](const char *k);
+        template <class T>
+        Value get(const char *k, const T &default_value) const;
+
+        bool isBool() const    { return m_type == JT_BOOL;    }
+        bool isNumeric() const   { return m_type == JT_DOUBLE || m_type == JT_INTEGER;   }
+        bool isDouble() const   { return m_type == JT_DOUBLE;   }
+        bool isInt() const { return m_type == JT_INTEGER; }
+        bool isString() const  { return m_type == JT_STRING;  }
+        bool isArray() const   { return m_type == JT_ARRAY;   }
+        bool isObject() const  { return m_type == JT_OBJECT;  }
+        bool isNull() const    { return m_type == JT_NULL;    }
         Type GetType() const   { return m_type;               }
-        bool AsBool() const         { return m_bool;   }
-        double AsFloat() const      { return m_fval;   }
-        long long AsInteger() const { return m_intval; }
-        const char* AsString() const 
+        bool asBool() const         { return m_bool;   }
+        double asDouble() const      
+        {
+            if (m_type == JT_INTEGER)
+                return (double)m_intval; 
+            if (m_type == JT_DOUBLE)
+                return m_fval;
+            if (m_type == JT_BOOL)
+                return m_bool?1:0;
+            if (m_type == JT_NULL)
+                return 0;
+            return 0;  
+        }
+        long long asInt() const 
+        {
+            if (m_type == JT_INTEGER)
+                return m_intval; 
+            if (m_type == JT_DOUBLE)
+                return (long long)m_fval;
+            if (m_type == JT_BOOL)
+                return m_bool?1:0;
+            if (m_type == JT_NULL)
+                return 0;
+            return 0;            
+        }
+        unsigned long long asUInt() const 
+        {
+            if (m_type == JT_INTEGER)
+                return (unsigned long long)m_intval; 
+            if (m_type == JT_DOUBLE)
+                return (unsigned long long)m_fval;
+            if (m_type == JT_BOOL)
+                return m_bool?1:0;
+            if (m_type == JT_NULL)
+                return 0;
+            return 0;            
+        }
+        const char* asCString() const 
         { 
             if (m_type == JT_STRING)
             {
@@ -330,10 +432,12 @@ namespace tjson
         }
         static Value Null;
         
-        size_t Size() const;
+        size_t size() const;
         template <class VECT>
         void GetKeys(VECT *vec) const;
     private:
+        void destroy();
+        void assign( const Value &v );
         Type m_type;
         union {
             internal::Vector *m_array;
@@ -440,7 +544,7 @@ namespace tjson
                 }
                 return Value::Null;
             }
-        private:         
+      
             MapData *m_data;
             template <class T>
             friend inline void data_copy(T &l, const T &r);
@@ -480,44 +584,7 @@ namespace tjson
         jsfree(buff, buff_capacity);
     }
 
-    inline Value::Value( const Value &v ) 
-        :m_type(v.GetType()),internal_parent(NULL)
-    {
-        switch (m_type)
-        {
-        case JT_ARRAY:
-            *m_array = *v.m_array;
-            break;
-        case JT_OBJECT:
-            *m_dict = *v.m_dict;
-            break;
-        case JT_STRING:
-            *m_strval = *v.m_strval;
-            break;
-        default:
-            m_intval = v.m_intval;
-        }
-    }
-
-    inline Value::~Value()
-    {
-        switch (m_type)
-        {
-        case JT_ARRAY:
-            delete m_array;
-            break;
-        case JT_OBJECT:
-            delete m_dict;
-            break;
-        case JT_STRING:
-            delete m_strval;
-            break;
-        default:
-            break;
-        }
-    }
-
-    inline size_t Value::Size() const
+    inline size_t Value::size() const
     {
         if (m_type == JT_ARRAY)
         {
@@ -540,6 +607,17 @@ namespace tjson
             assert(m_dict);
             m_dict->GetKeys(vec);
         }
+    }
+
+    template <class T>
+    Value Value::get( const char *k, const T &default_value ) const
+    {
+        if (m_type == JT_OBJECT)
+        {
+            assert(m_dict);
+            return m_dict->find(internal::String(k,strlen(k)));
+        }
+        return default_value;
     }
 
 } // namespace tjson
